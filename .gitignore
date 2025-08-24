@@ -73,3 +73,13 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Firebase configuration files
+ios/KcellMobile/GoogleService-Info.plist
+android/app/google-services.json
+serviceAccountKey.json
+
+# Environment variables
+.env
+.env.local
+.env.production
