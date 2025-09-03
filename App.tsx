@@ -12,7 +12,6 @@ export default function App() {
 
     // Обработчик готовности FCM токена
     const handleTokenReady = (token: string) => {
-        console.log('🎯 FCM token ready in App.tsx:', token);
         setFcmToken(token);
         
         // Отправляем токен в WebView
@@ -21,11 +20,9 @@ export default function App() {
 
     // Функция для вызова инициализации FCM
     const callFCMInitialization = () => {
-        console.log('🔔 Calling real FCM initialization...');
         if (pushNotificationManagerRef.current && pushNotificationManagerRef.current.initializePushNotifications) {
             pushNotificationManagerRef.current.initializePushNotifications();
         } else {
-            console.log('❌ FCM initialization function not found, using fallback...');
             // Fallback: отправляем команду в WebView
             if (webviewRef.current) {
                 const script = `
@@ -43,8 +40,6 @@ export default function App() {
             // Проверяем auth token и отправляем FCM токен только если пользователь залогинен
             const script = `
                 (function() {
-                    console.log('🔍 Checking auth token for FCM registration...');
-                    
                     // Полная диагностика localStorage (как в Android)
                     var debug = {
                         'origin': location.origin,
@@ -57,16 +52,6 @@ export default function App() {
                         'all-keys': Object.keys(localStorage)
                     };
                     
-                    console.log('=== FCM TOKEN CHECK DEBUG ===');
-                    console.log('Origin:', debug.origin);
-                    console.log('URL:', debug.url);
-                    console.log('auth-storage:', debug['auth-storage']);
-                    console.log('token:', debug['token']);
-                    console.log('authToken:', debug['authToken']);
-                    console.log('accessToken:', debug['accessToken']);
-                    console.log('session-token:', debug['session-token']);
-                    console.log('All localStorage keys:', debug['all-keys']);
-                    
                     var authToken = null;
                     
                     // 1. Попробуем auth-storage (Zustand)
@@ -75,29 +60,17 @@ export default function App() {
                             var authData = JSON.parse(debug['auth-storage']);
                             // Zustand с persist сохраняет данные в state
                             authToken = authData.state?.token || authData.token || null;
-                            console.log('✅ Token from Zustand storage:', authToken ? authToken.substring(0, 20) + '...' : 'null');
                         } catch (e) {
-                            console.log('❌ Error parsing auth-storage:', e);
+                            // Error parsing auth-storage
                         }
                     }
                     
                     // 2. Fallback к простым ключам
                     if (!authToken) {
                         authToken = debug['token'] || debug['authToken'] || debug['accessToken'] || debug['session-token'] || null;
-                        console.log('✅ Token from legacy storage:', authToken ? authToken.substring(0, 20) + '...' : 'null');
                     }
                     
                     if (authToken) {
-                        console.log('🎯 Auth token found, length:', authToken.length);
-                        
-                        // Проверяем формат JWT токена
-                        var parts = authToken.split('.');
-                        if (parts.length === 3) {
-                            console.log('✅ JWT token format looks valid (3 parts)');
-                        } else {
-                            console.log('⚠️ JWT token format invalid - expected 3 parts, got ' + parts.length);
-                        }
-                        
                         // Отправляем оба токена в React Native
                         window.ReactNativeWebView.postMessage(JSON.stringify({
                             type: 'authAndFCMTokens',
@@ -111,8 +84,6 @@ export default function App() {
                             window.receiveFCMToken('${token}', authToken); 
                         }
                     } else {
-                        console.log('❌ No auth token found - user not logged in');
-                        
                         // Отправляем сообщение что токен не найден
                         window.ReactNativeWebView.postMessage(JSON.stringify({
                             type: 'authAndFCMTokens',
@@ -143,7 +114,6 @@ export default function App() {
 
     const sendTokensToServer = async (fcmToken: string, authToken: string) => {
         try {
-            console.log('Sending tokens to server...');
             const response = await fetch('http://localhost:3000/api/fcm/register', {
                 method: 'POST',
                 headers: {
@@ -158,21 +128,19 @@ export default function App() {
             });
 
             if (response.ok) {
-                console.log('Tokens sent to server successfully');
                 const result = await response.json();
-                console.log('Server response:', result);
+                // Tokens sent successfully
             } else {
-                console.error('Failed to send tokens to server:', response.status);
+                // Failed to send tokens
             }
         } catch (error) {
-            console.error('Error sending tokens to server:', error);
+            // Error sending tokens
         }
     };
 
     const onWebViewMessage = (event: any) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
-            console.log('Message from WebView:', data);
 
             switch (data.type) {
                 case 'getFCMToken':
@@ -180,56 +148,44 @@ export default function App() {
                         sendTokenToWebView(fcmToken);
                     } else {
                         // Если токен еще не готов, сохраняем запрос
-                        console.log('FCM token not ready yet, will send when available');
                         // Можно добавить очередь запросов здесь
                     }
                     break;
                 case 'authAndFCMTokens':
                     // Получаем оба токена от WebView
                     const { authToken, fcmToken: webviewFcmToken, success, error } = data;
-                    console.log('Received auth token:', authToken ? authToken.substring(0, 20) + '...' : 'null');
-                    console.log('Received FCM token from WebView:', webviewFcmToken);
-                    console.log('Success:', success);
-                    console.log('Error:', error);
                     
                     if (success && authToken && webviewFcmToken) {
-                        console.log('✅ User is logged in, sending tokens to server...');
+                        // User is logged in, sending tokens to server
                         sendTokensToServer(webviewFcmToken, authToken);
                     } else {
-                        console.log('⚠️ User not logged in, FCM token saved for later');
-                        // Сохраняем FCM токен для отправки после логина
+                        // User not logged in, FCM token saved for later
                         setFcmToken(webviewFcmToken);
                     }
                     break;
                 case 'subscribeToTopic':
-                    console.log('Subscribe to topic:', data.topic);
-                    // TODO: Implement topic subscription
+                    // Subscribe to topic
                     break;
                 case 'unsubscribeFromTopic':
-                    console.log('Unsubscribe from topic:', data.topic);
-                    // TODO: Implement topic unsubscription
+                    // Unsubscribe from topic
                     break;
                 case 'sendTokenToServer':
                     if (fcmToken) {
-                        console.log('Sending token to server:', fcmToken);
-                        // TODO: Implement token sending
+                        // Sending token to server
                     }
                     break;
                 case 'userLoggedIn':
                     // Пользователь залогинился, отправляем сохраненный FCM токен
                     const { authToken: loginAuthToken, success: loginSuccess } = data;
-                    console.log('User logged in, auth token:', loginAuthToken ? loginAuthToken.substring(0, 20) + '...' : 'null');
                     
                     if (loginSuccess && loginAuthToken) {
-                        console.log('✅ User logged in, requesting push notification permission...');
+                        // User logged in, requesting push notification permission
                         
                         // Отправляем команду в WebView для инициализации push-уведомлений
                         if (webviewRef.current) {
                             const script = `
                                 if (window.initializePushNotifications) {
                                     window.initializePushNotifications();
-                                } else {
-                                    console.log('Push notifications initialization function not found');
                                 }
                             `;
                             webviewRef.current.injectJavaScript(script);
@@ -237,18 +193,16 @@ export default function App() {
                         
                         // Отправляем токены на сервер
                         if (fcmToken) {
-                            console.log('✅ User logged in, sending FCM token to server...');
+                            // User logged in, sending FCM token to server
                             sendTokensToServer(fcmToken, loginAuthToken);
                         }
                     }
                     break;
                 case 'testPushNotification':
-                    // Тестирование push-уведомлений убрано - доступно только через терминал
-                    console.log('🧪 Test push notification requested but disabled - use terminal for testing');
+                    // Test push notification requested but disabled - use terminal for testing
                     break;
                 case 'initializePushNotifications':
                     // Инициализация push-уведомлений после логина
-                    console.log('🔔 Initializing push notifications after login...');
                     
                     // Проверяем, не показывали ли мы уже диалог
                     if (!pushDialogShown) {
@@ -263,30 +217,28 @@ export default function App() {
                                 { 
                                     text: 'Да', 
                                     onPress: () => {
-                                        console.log('User agreed to push notifications');
+                                        // User agreed to push notifications
                                         // Вызываем реальную инициализацию FCM
                                         callFCMInitialization();
                                     }
                                 }
                             ]
                         );
-                    } else {
-                        console.log('🔔 Push notification dialog already shown, skipping...');
                     }
                     break;
                 default:
-                    console.log('Unknown message type:', data.type);
+                    // Unknown message type
             }
         } catch (error) {
-            console.error('Error parsing WebView message:', error);
+            // Error parsing WebView message
         }
     };
 
     const injectedJavaScript = `
         // Глобальные функции для FCM
         window.receiveFCMToken = function(token, authToken) {
-            console.log('FCM Token received from native:', token);
-            console.log('Auth Token received from native:', authToken);
+            // FCM Token received from native
+            // Auth Token received from native
             // Здесь можно обработать токены в веб-приложении
             if (window.fcmTokenCallback) {
                 window.fcmTokenCallback(token, authToken);
@@ -294,7 +246,7 @@ export default function App() {
         };
 
         window.receiveFCMData = function(data) {
-            console.log('FCM Data received from native:', data);
+            // FCM Data received from native
             // Здесь можно обработать данные уведомления
             if (window.fcmDataCallback) {
                 window.fcmDataCallback(data);
@@ -330,7 +282,6 @@ export default function App() {
 
         window.getAuthToken = function() {
             const authToken = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
-            console.log('Auth token from localStorage:', authToken);
             return authToken;
         };
 
@@ -343,27 +294,19 @@ export default function App() {
             }));
         };
 
-        // Функция для тестирования push-уведомлений убрана - тестирование доступно только через терминал
-
         // Функция для инициализации push-уведомлений после логина
         window.initializePushNotifications = function() {
-            console.log('🔔 Initializing push notifications after login...');
-            
             // Проверяем, не вызывали ли мы уже инициализацию
             if (!window.pushNotificationsInitialized) {
                 window.pushNotificationsInitialized = true;
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'initializePushNotifications'
                 }));
-            } else {
-                console.log('🔔 Push notifications already initialized, skipping...');
             }
         };
 
         // Функция для проверки токена после логина (как в Android)
         window.checkTokenAfterLogin = function() {
-            console.log('🔍 Checking token after login...');
-            
             // Полная диагностика localStorage
             var debug = {
                 'origin': location.origin,
@@ -376,16 +319,6 @@ export default function App() {
                 'all-keys': Object.keys(localStorage)
             };
             
-            console.log('=== LOGIN CHECK DEBUG ===');
-            console.log('Origin:', debug.origin);
-            console.log('URL:', debug.url);
-            console.log('auth-storage:', debug['auth-storage']);
-            console.log('token:', debug['token']);
-            console.log('authToken:', debug['authToken']);
-            console.log('accessToken:', debug['accessToken']);
-            console.log('session-token:', debug['session-token']);
-            console.log('All localStorage keys:', debug['all-keys']);
-            
             var authToken = null;
             
             // 1. Попробуем auth-storage (Zustand)
@@ -393,21 +326,17 @@ export default function App() {
                 try {
                     var authData = JSON.parse(debug['auth-storage']);
                     authToken = authData.state?.token || authData.token || null;
-                    console.log('✅ Token from Zustand storage:', authToken ? authToken.substring(0, 20) + '...' : 'null');
                 } catch (e) {
-                    console.log('❌ Error parsing auth-storage:', e);
+                    // Error parsing auth-storage
                 }
             }
             
             // 2. Fallback к простым ключам
             if (!authToken) {
                 authToken = debug['token'] || debug['authToken'] || debug['accessToken'] || debug['session-token'] || null;
-                console.log('✅ Token from legacy storage:', authToken ? authToken.substring(0, 20) + '...' : 'null');
             }
             
             if (authToken) {
-                console.log('🎯 Auth token found after login, length:', authToken.length);
-                
                 // Отправляем сообщение в React Native
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'userLoggedIn',
@@ -415,7 +344,6 @@ export default function App() {
                     success: true
                 }));
             } else {
-                console.log('❌ No auth token found after login');
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'userLoggedIn',
                     authToken: null,
@@ -427,7 +355,6 @@ export default function App() {
 
         // Автоматически запрашиваем токен при загрузке страницы
         setTimeout(() => {
-            console.log('Requesting FCM token...');
             window.getFCMToken();
         }, 1000);
 
@@ -443,7 +370,6 @@ export default function App() {
                                sessionStorage.getItem('token');
                     
                     if (token) {
-                        console.log('🔍 Delayed check (' + delay + 'ms) found token:', token.substring(0, 20) + '...');
                         window.loginDetected = true;
                         window.checkTokenAfterLogin();
                     }
@@ -451,20 +377,13 @@ export default function App() {
             }, delay);
         });
 
-        // Кнопки для тестирования убраны - логи остаются только в терминале
-        console.log('🔔 FCM integration ready - test buttons removed, logs available in terminal only');
-
         // Мониторинг изменений localStorage для обнаружения логина
         var originalSetItem = localStorage.setItem;
         localStorage.setItem = function(key, value) {
             originalSetItem.apply(this, arguments);
             
-            console.log('🔍 localStorage.setItem called:', key, value ? value.substring(0, 50) + '...' : 'null');
-            
             // Проверяем, не изменился ли auth token
             if (key === 'auth-storage' || key === 'token' || key === 'authToken' || key === 'accessToken') {
-                console.log('🔍 Auth-related localStorage changed:', key, value ? value.substring(0, 20) + '...' : 'null');
-                
                 // Даем время на завершение операций
                 setTimeout(() => {
                     window.checkTokenAfterLogin();
@@ -477,11 +396,7 @@ export default function App() {
         sessionStorage.setItem = function(key, value) {
             originalSessionSetItem.apply(this, arguments);
             
-            console.log('🔍 sessionStorage.setItem called:', key, value ? value.substring(0, 50) + '...' : 'null');
-            
             if (key === 'token' || key === 'authToken' || key === 'accessToken') {
-                console.log('🔍 Auth-related sessionStorage changed:', key, value ? value.substring(0, 20) + '...' : 'null');
-                
                 setTimeout(() => {
                     window.checkTokenAfterLogin();
                 }, 500);
@@ -497,7 +412,6 @@ export default function App() {
                               sessionStorage.getItem('token');
             
             if (currentToken && !window.loginDetected) {
-                console.log('🔍 Periodic check found token:', currentToken.substring(0, 20) + '...');
                 window.loginDetected = true;
                 window.checkTokenAfterLogin();
             }
@@ -506,7 +420,6 @@ export default function App() {
         // Останавливаем проверку через 60 секунд
         setTimeout(() => {
             clearInterval(checkInterval);
-            console.log('⏰ Stopped periodic token checking');
         }, 60000);
 
         // 2. Мониторинг событий DOM для обнаружения изменений
@@ -519,7 +432,6 @@ export default function App() {
                                    localStorage.getItem('token') || 
                                    localStorage.getItem('authToken');
                         if (token) {
-                            console.log('🔍 DOM mutation detected token:', token.substring(0, 20) + '...');
                             window.loginDetected = true;
                             window.checkTokenAfterLogin();
                         }
@@ -543,7 +455,6 @@ export default function App() {
                                localStorage.getItem('token') || 
                                localStorage.getItem('authToken');
                     if (token) {
-                        console.log('🔍 Enter key detected token:', token.substring(0, 20) + '...');
                         window.loginDetected = true;
                         window.checkTokenAfterLogin();
                     }
@@ -559,7 +470,6 @@ export default function App() {
                                localStorage.getItem('token') || 
                                localStorage.getItem('authToken');
                     if (token) {
-                        console.log('🔍 Click event detected token:', token.substring(0, 20) + '...');
                         window.loginDetected = true;
                         window.checkTokenAfterLogin();
                     }
@@ -576,7 +486,6 @@ export default function App() {
                                    localStorage.getItem('token') || 
                                    localStorage.getItem('authToken');
                         if (token) {
-                            console.log('🔍 Input focus detected token:', token.substring(0, 20) + '...');
                             window.loginDetected = true;
                             window.checkTokenAfterLogin();
                         }
@@ -590,7 +499,6 @@ export default function App() {
         setInterval(() => {
             if (window.location.href !== currentURL) {
                 currentURL = window.location.href;
-                console.log('🔍 URL changed to:', currentURL);
                 
                 setTimeout(() => {
                     if (!window.loginDetected) {
@@ -598,7 +506,6 @@ export default function App() {
                                    localStorage.getItem('token') || 
                                    localStorage.getItem('authToken');
                         if (token) {
-                            console.log('🔍 URL change detected token:', token.substring(0, 20) + '...');
                             window.loginDetected = true;
                             window.checkTokenAfterLogin();
                         }
