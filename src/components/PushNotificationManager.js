@@ -99,36 +99,14 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
 
   // Обработка уведомлений в фоне
   const onMessageReceived = async (remoteMessage) => {
-    console.log('Received background message:', remoteMessage);
-    
-    // Показываем локальное уведомление
-    Alert.alert(
-      remoteMessage.notification?.title || 'Новое уведомление',
-      remoteMessage.notification?.body || 'У вас новое сообщение',
-      [
-        {
-          text: 'OK',
-          onPress: () => console.log('OK Pressed'),
-        },
-      ]
-    );
+    console.log('📱 Received background message:', remoteMessage);
+    // Уведомления показываются только в терминале
   };
 
   // Обработка уведомлений когда приложение открыто
   const onForegroundMessage = async (remoteMessage) => {
-    console.log('Received foreground message:', remoteMessage);
-    
-    // Показываем локальное уведомление
-    Alert.alert(
-      remoteMessage.notification?.title || 'Новое уведомление',
-      remoteMessage.notification?.body || 'У вас новое сообщение',
-      [
-        {
-          text: 'OK',
-          onPress: () => console.log('OK Pressed'),
-        },
-      ]
-    );
+    console.log('📱 Received foreground message:', remoteMessage);
+    // Уведомления показываются только в терминале
   };
 
   // Обработка нажатия на уведомление
@@ -137,25 +115,10 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
     // Здесь можно добавить навигацию к определенному экрану
   };
 
-  // Тестовая функция для симуляции push-уведомлений на симуляторе
+  // Тестовая функция для симуляции push-уведомлений убрана - тестирование доступно только через терминал
   const simulatePushNotification = () => {
     if (Platform.OS === 'ios' && __DEV__) {
-      console.log('Simulating push notification on simulator...');
-      
-      // Симулируем получение push-уведомления
-      const testMessage = {
-        notification: {
-          title: 'Тестовое уведомление',
-          body: 'Это тестовое push-уведомление с симулятора'
-        },
-        data: {
-          type: 'test',
-          timestamp: Date.now().toString()
-        }
-      };
-      
-      // Вызываем обработчик уведомлений
-      onForegroundMessage(testMessage);
+      console.log('🧪 Push notification simulation disabled - use terminal for testing');
     }
   };
 

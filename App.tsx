@@ -243,16 +243,8 @@ export default function App() {
                     }
                     break;
                 case 'testPushNotification':
-                    // Тестирование push-уведомлений на симуляторе
-                    console.log('Testing push notification...');
-                    // Показываем тестовое уведомление
-                    Alert.alert(
-                        'Тестовое уведомление',
-                        'Это тестовое push-уведомление с симулятора',
-                        [
-                            { text: 'OK', onPress: () => console.log('Test notification OK pressed') }
-                        ]
-                    );
+                    // Тестирование push-уведомлений убрано - доступно только через терминал
+                    console.log('🧪 Test push notification requested but disabled - use terminal for testing');
                     break;
                 case 'initializePushNotifications':
                     // Инициализация push-уведомлений после логина
@@ -262,7 +254,7 @@ export default function App() {
                     if (!pushDialogShown) {
                         setPushDialogShown(true);
                         
-                        // Вызываем инициализацию через PushNotificationManager
+                        // Показываем диалог для запроса разрешения на push-уведомления
                         Alert.alert(
                             'Разрешение на уведомления',
                             'Хотите получать push-уведомления?',
@@ -270,11 +262,11 @@ export default function App() {
                                 { text: 'Нет', style: 'cancel' },
                                 { 
                                     text: 'Да', 
-                                                                    onPress: () => {
-                                    console.log('User agreed to push notifications');
-                                    // Вызываем реальную инициализацию FCM
-                                    callFCMInitialization();
-                                }
+                                    onPress: () => {
+                                        console.log('User agreed to push notifications');
+                                        // Вызываем реальную инициализацию FCM
+                                        callFCMInitialization();
+                                    }
                                 }
                             ]
                         );
@@ -351,12 +343,7 @@ export default function App() {
             }));
         };
 
-        // Функция для тестирования push-уведомлений на симуляторе
-        window.testPushNotification = function() {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'testPushNotification'
-            }));
-        };
+        // Функция для тестирования push-уведомлений убрана - тестирование доступно только через терминал
 
         // Функция для инициализации push-уведомлений после логина
         window.initializePushNotifications = function() {
@@ -464,31 +451,8 @@ export default function App() {
             }, delay);
         });
 
-        // Добавляем кнопки для тестирования (только в dev режиме)
-        if (window.location.hostname === 'localhost' || window.location.hostname.includes('vercel.app')) {
-            setTimeout(() => {
-                // Создаем кнопку для тестирования push-уведомлений
-                var testButton = document.createElement('button');
-                testButton.textContent = '🧪 Test Push Notification';
-                testButton.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 9999; background: #007aff; color: white; border: none; padding: 10px; border-radius: 5px; font-size: 12px;';
-                testButton.onclick = function() {
-                    window.testPushNotification();
-                };
-                document.body.appendChild(testButton);
-                
-                // Создаем кнопку для ручного тестирования логина
-                var loginTestButton = document.createElement('button');
-                loginTestButton.textContent = '🔐 Test Login Detection';
-                loginTestButton.style.cssText = 'position: fixed; top: 50px; right: 10px; z-index: 9999; background: #ff6b35; color: white; border: none; padding: 10px; border-radius: 5px; font-size: 12px;';
-                loginTestButton.onclick = function() {
-                    console.log('🔐 Manual login test triggered');
-                    window.checkTokenAfterLogin();
-                };
-                document.body.appendChild(loginTestButton);
-                
-                console.log('Test buttons added to page');
-            }, 2000);
-        }
+        // Кнопки для тестирования убраны - логи остаются только в терминале
+        console.log('🔔 FCM integration ready - test buttons removed, logs available in terminal only');
 
         // Мониторинг изменений localStorage для обнаружения логина
         var originalSetItem = localStorage.setItem;
