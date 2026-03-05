@@ -75,7 +75,7 @@ yarn-error.log
 !.yarn/versions
 
 # Firebase configuration files
-ios/KcellMobile/GoogleService-Info.plist
+ios/Workflow/GoogleService-Info.plist
 android/app/google-services.json
 serviceAccountKey.json
 

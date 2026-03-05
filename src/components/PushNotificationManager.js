@@ -1,21 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
-import messaging from '@react-native-firebase/messaging';
+import { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification, requestPermission, onTokenRefresh, AuthorizationStatus } from '@react-native-firebase/messaging';
+import { getApp, getApps } from '@react-native-firebase/app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import firebase from '@react-native-firebase/app';
 
 const PushNotificationManager = ({ children, onTokenReady, ref }) => {
   const [fcmToken, setFcmToken] = useState(null);
 
   // Инициализация Firebase
   useEffect(() => {
-    try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp();
+    const initializeFirebase = async () => {
+      try {
+        if (!getApps().length) {
+          console.log('🔥 [PUSH] Инициализируем Firebase...');
+          // Firebase авто-инициализируется через GoogleService-Info.plist / google-services.json
+          console.log('✅ [PUSH] Firebase инициализирован');
+        } else {
+          console.log('✅ [PUSH] Firebase уже инициализирован');
+        }
+        
+        // Ждем немного для полной инициализации Firebase
+        console.log('⏳ [PUSH] Ждем полной инициализации Firebase...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('✅ [PUSH] Firebase готов к использованию');
+        
+        // Автоматически получаем FCM токен при инициализации
+        console.log('🔄 [PUSH] Автоматически получаем FCM токен...');
+        getFCMToken();
+        
+      } catch (error) {
+        console.error('❌ [PUSH] Ошибка инициализации Firebase:', error);
       }
-    } catch (error) {
-      // Firebase initialization error
-    }
+    };
+
+    initializeFirebase();
   }, []);
 
   // Экспортируем функцию через ref
@@ -30,16 +48,13 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
   // Запрос разрешений на уведомления
   const requestUserPermission = async () => {
     try {
-      const authStatus = await messaging().requestPermission();
+      const messaging = getMessaging();
+      const authStatus = await requestPermission(messaging);
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
 
-      if (enabled) {
-        return true;
-      } else {
-        return false;
-      }
+      return enabled;
     } catch (error) {
       return false;
     }
@@ -48,17 +63,39 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
   // Получение FCM токена
   const getFCMToken = async () => {
     try {
-      const token = await messaging().getToken();
-      setFcmToken(token);
+      console.log('🔍 [PUSH] Запрашиваем FCM токен у Firebase...');
       
-      // Сохраняем токен в AsyncStorage
-      await AsyncStorage.setItem('fcmToken', token);
+      // Проверяем, что Firebase инициализирован
+      if (!getApps().length) {
+        console.log('⚠️ [PUSH] Firebase еще не инициализирован, ждем...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!getApps().length) {
+          console.log('❌ [PUSH] Firebase все еще не инициализирован, пропускаем получение токена');
+          return null;
+        }
+      }
       
-      // Отправляем токен на сервер
-      await sendTokenToServer(token);
+      console.log('✅ [PUSH] Firebase готов, запрашиваем FCM токен...');
+      const messaging = getMessaging();
+      const token = await getToken(messaging);
       
-      return token;
+      if (token) {
+        setFcmToken(token);
+        console.log('✅ [PUSH] FCM токен получен от Firebase:', token);
+        
+        await AsyncStorage.setItem('fcmToken', token);
+        console.log('💾 [PUSH] FCM токен сохранен в AsyncStorage');
+        
+        console.log('⏳ [PUSH] FCM токен готов, ждем auth token для отправки на сервер');
+        
+        return token;
+      } else {
+        console.log('⚠️ [PUSH] FCM токен не получен от Firebase');
+        return null;
+      }
     } catch (error) {
+      console.error('❌ [PUSH] Ошибка получения FCM токена:', error);
       return null;
     }
   };
@@ -66,48 +103,92 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
   // Отправка токена на сервер
   const sendTokenToServer = async (token) => {
     try {
-      const response = await fetch('http://localhost:3000/api/fcm/register', {
+      console.log('🚀 [PUSH] Отправка FCM токена на сервер...');
+      console.log('🔑 [PUSH] Токен:', token);
+      console.log('📱 [PUSH] Платформа:', Platform.OS);
+      
+      let authToken = null;
+      try {
+        authToken = await AsyncStorage.getItem('token') || 
+                   await AsyncStorage.getItem('authToken') || 
+                   await AsyncStorage.getItem('accessToken');
+      } catch (e) {
+        console.log('⚠️ [PUSH] Не удалось получить auth token из AsyncStorage');
+      }
+      
+      if (authToken) {
+        console.log('🔐 [PUSH] Auth token найден');
+      } else {
+        console.log('❌ [PUSH] Auth token не найден');
+      }
+      
+      const apiUrl = 'https://workflow-back-zpk4.onrender.com/api/fcm/token';
+      
+      const deviceId = await AsyncStorage.getItem('deviceId') || 
+                      await AsyncStorage.getItem('fcmToken') || 
+                      `device_${Date.now()}`;
+      
+      if (!await AsyncStorage.getItem('deviceId')) {
+        await AsyncStorage.setItem('deviceId', deviceId);
+      }
+      
+      const requestBody = {
+        token: token,
+        platform: Platform.OS,
+        deviceId: deviceId,
+      };
+      
+      console.log('📤 [PUSH] Отправляем данные на сервер:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
         },
-        body: JSON.stringify({
-          token: token,
-          platform: Platform.OS,
-          userId: 'user123', // Замените на реальный ID пользователя
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
-        // FCM token sent successfully
+        const result = await response.json();
+        console.log('✅ [PUSH] FCM токен успешно отправлен на сервер');
+        
+        await AsyncStorage.setItem('fcmTokenSent', 'true');
+        await AsyncStorage.setItem('fcmTokenSentAt', new Date().toISOString());
+        
       } else {
-        // Failed to send FCM token
+        const errorText = await response.text();
+        console.error('❌ [PUSH] Ошибка отправки FCM токена:', response.status, errorText);
+        
+        await AsyncStorage.setItem('fcmTokenSent', 'false');
+        await AsyncStorage.setItem('fcmTokenError', errorText);
       }
     } catch (error) {
-      // Error sending token
+      console.error('❌ [PUSH] Ошибка при отправке FCM токена:', error);
+      
+      await AsyncStorage.setItem('fcmTokenSent', 'false');
+      await AsyncStorage.setItem('fcmTokenError', error.message);
     }
   };
 
   // Обработка уведомлений в фоне
-  const onMessageReceived = async (remoteMessage) => {
-    // Уведомления показываются только в терминале
+  const onMessageReceivedHandler = async (remoteMessage) => {
+    console.log('[PUSH] Background message:', remoteMessage);
   };
 
-  // Обработка уведомлений когда приложение открыто
-  const onForegroundMessage = async (remoteMessage) => {
-    // Уведомления показываются только в терминале
+  // Обработка уведомлений когда приложение открыто (foreground)
+  const onForegroundMessageHandler = async (remoteMessage) => {
+    console.log('[PUSH] Foreground message received:', JSON.stringify(remoteMessage));
+    
+    if (remoteMessage.data) {
+      console.log('[PUSH] Foreground message data:', remoteMessage.data);
+    }
   };
 
   // Обработка нажатия на уведомление
-  const onNotificationOpenedApp = (remoteMessage) => {
-    // Здесь можно добавить навигацию к определенному экрану
-  };
-
-  // Тестовая функция для симуляции push-уведомлений убрана - тестирование доступно только через терминал
-  const simulatePushNotification = () => {
-    if (Platform.OS === 'ios' && __DEV__) {
-      // Push notification simulation disabled - use terminal for testing
-    }
+  const onNotificationOpenedAppHandler = (remoteMessage) => {
+    console.log('[PUSH] Notification opened app:', JSON.stringify(remoteMessage));
   };
 
   // Состояние для отслеживания инициализации
@@ -116,79 +197,63 @@ const PushNotificationManager = ({ children, onTokenReady, ref }) => {
   // Функция для инициализации push-уведомлений после логина
   const initializePushNotifications = async () => {
     try {
-      // Запрашиваем разрешения
-      const hasPermission = await requestUserPermission();
+      console.log('🔄 [PUSH] Инициализация push-уведомлений в React Native...');
       
-      if (hasPermission) {
-        // Получаем FCM токен
-        const token = await getFCMToken();
-        
-        // Уведомляем App.tsx о готовности токена
+      console.log('✅ [PUSH] Разрешения уже получены нативно, пропускаем запрос');
+      
+      const token = await getFCMToken();
+      
+      if (token) {
         if (onTokenReady) {
           onTokenReady(token);
         }
         
+        const messaging = getMessaging();
+        
         // Подписываемся на обновления токена
-        const unsubscribeToken = messaging().onTokenRefresh(token => {
-          setFcmToken(token);
-          AsyncStorage.setItem('fcmToken', token);
-          sendTokenToServer(token);
+        const unsubscribeToken = onTokenRefresh(messaging, newToken => {
+          setFcmToken(newToken);
+          AsyncStorage.setItem('fcmToken', newToken);
           
-          // Уведомляем App.tsx об обновлении токена
+          console.log('🔄 [PUSH] FCM токен обновлен, ждем auth token для отправки на сервер');
+          
           if (onTokenReady) {
-            onTokenReady(token);
+            onTokenReady(newToken);
           }
         });
 
-        // Подписываемся на уведомления в фоне
-        const unsubscribeBackground = messaging().onMessage(onMessageReceived);
-
         // Подписываемся на уведомления когда приложение открыто
-        const unsubscribeForeground = messaging().onMessage(onForegroundMessage);
+        const unsubscribeForeground = onMessage(messaging, onForegroundMessageHandler);
 
         // Подписываемся на нажатие уведомления
-        const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(onNotificationOpenedApp);
+        const unsubscribeOpenedApp = onNotificationOpenedApp(messaging, onNotificationOpenedAppHandler);
 
         // Проверяем, было ли приложение открыто через уведомление
-        messaging()
-          .getInitialNotification()
+        getInitialNotification(messaging)
           .then(remoteMessage => {
             if (remoteMessage) {
-              // App opened from quit state
+              console.log('[PUSH] App opened from quit state via notification:', remoteMessage);
             }
           });
 
         setIsInitialized(true);
+        console.log('✅ [PUSH] Push-уведомления инициализированы в React Native');
 
         return () => {
           unsubscribeToken();
-          unsubscribeBackground();
           unsubscribeForeground();
           unsubscribeOpenedApp();
         };
       } else {
-        Alert.alert(
-          'Уведомления отключены',
-          'Для получения важных уведомлений включите разрешение на уведомления в настройках приложения.',
-          [
-            { text: 'Позже', style: 'cancel' },
-            { 
-              text: 'Настройки', 
-              onPress: () => {
-                // Open app settings
-              }
-            }
-          ]
-        );
+        console.log('⚠️ [PUSH] FCM токен не получен, но разрешения есть');
       }
     } catch (error) {
-      // Error initializing push notifications
+      console.error('❌ [PUSH] Ошибка инициализации push-уведомлений:', error);
     }
   };
 
   // Экспортируем функцию для вызова из App.tsx
   useEffect(() => {
-    // Делаем функцию доступной глобально
     if (typeof window !== 'undefined') {
       window.initializePushNotifications = initializePushNotifications;
     }

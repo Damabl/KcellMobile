@@ -1,4 +1,15 @@
-import messaging from '@react-native-firebase/messaging';
+import {
+  getMessaging,
+  getToken,
+  deleteToken as deleteFirebaseToken,
+  onMessage,
+  onNotificationOpenedApp,
+  getInitialNotification,
+  requestPermission,
+  subscribeToTopic,
+  unsubscribeFromTopic,
+  AuthorizationStatus,
+} from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -18,10 +29,11 @@ class FCMService {
   // Запрос разрешений на уведомления
   async requestUserPermission(): Promise<boolean> {
     try {
-      const authStatus = await messaging().requestPermission();
+      const messaging = getMessaging();
+      const authStatus = await requestPermission(messaging);
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
 
       console.log('FCM Permission status:', authStatus);
       return enabled;
@@ -34,8 +46,8 @@ class FCMService {
   // Получение FCM токена
   async getFCMToken(): Promise<string | null> {
     try {
-      // Запрашиваем новый токен
-      const token = await messaging().getToken();
+      const messaging = getMessaging();
+      const token = await getToken(messaging);
       if (token) {
         this.fcmToken = token;
         await this.saveToken(token);
@@ -73,7 +85,8 @@ class FCMService {
   // Удаление токена
   async deleteToken(): Promise<void> {
     try {
-      await messaging().deleteToken();
+      const messaging = getMessaging();
+      await deleteFirebaseToken(messaging);
       await AsyncStorage.removeItem('fcm_token');
       this.fcmToken = null;
       console.log('FCM Token deleted');
@@ -83,9 +96,10 @@ class FCMService {
   }
 
   // Подписка на тему
-  async subscribeToTopic(topic: string): Promise<void> {
+  async subscribeToTopicName(topic: string): Promise<void> {
     try {
-      await messaging().subscribeToTopic(topic);
+      const messaging = getMessaging();
+      await subscribeToTopic(messaging, topic);
       console.log('Subscribed to topic:', topic);
     } catch (error) {
       console.error('Error subscribing to topic:', error);
@@ -93,9 +107,10 @@ class FCMService {
   }
 
   // Отписка от темы
-  async unsubscribeFromTopic(topic: string): Promise<void> {
+  async unsubscribeFromTopicName(topic: string): Promise<void> {
     try {
-      await messaging().unsubscribeFromTopic(topic);
+      const messaging = getMessaging();
+      await unsubscribeFromTopic(messaging, topic);
       console.log('Unsubscribed from topic:', topic);
     } catch (error) {
       console.error('Error unsubscribing from topic:', error);
@@ -105,7 +120,7 @@ class FCMService {
   // Отправка токена на сервер
   async sendTokenToServer(token: string, userId?: string): Promise<boolean> {
     try {
-      const response = await fetch('https://kcell-service.vercel.app/api/fcm/token', {
+      const response = await fetch('https://workflow-back-zpk4.onrender.com/api/fcm/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +164,6 @@ class FCMService {
         return deviceId;
       }
       
-      // Генерируем новый ID устройства
       const newDeviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await AsyncStorage.setItem('device_id', newDeviceId);
       return newDeviceId;
@@ -161,21 +175,22 @@ class FCMService {
 
   // Настройка обработчиков сообщений
   setupMessageHandlers(): void {
-    // Обработка сообщений когда приложение в фоне
-    messaging().onMessage(async remoteMessage => {
+    const messaging = getMessaging();
+
+    // Обработка сообщений когда приложение в foreground
+    onMessage(messaging, async remoteMessage => {
       console.log('FCM Message received in foreground:', remoteMessage);
       this.handleForegroundMessage(remoteMessage);
     });
 
     // Обработка нажатия на уведомление
-    messaging().onNotificationOpenedApp(remoteMessage => {
+    onNotificationOpenedApp(messaging, remoteMessage => {
       console.log('FCM Notification opened app:', remoteMessage);
       this.handleNotificationOpened(remoteMessage);
     });
 
     // Проверяем, было ли приложение открыто через уведомление
-    messaging()
-      .getInitialNotification()
+    getInitialNotification(messaging)
       .then(remoteMessage => {
         if (remoteMessage) {
           console.log('FCM App opened from notification:', remoteMessage);
@@ -186,24 +201,18 @@ class FCMService {
 
   // Обработка сообщений в foreground
   private handleForegroundMessage(remoteMessage: any): void {
-    // Здесь можно показать локальное уведомление
     console.log('Handling foreground message:', remoteMessage);
-    
-    // Отправляем данные в WebView
     this.sendDataToWebView(remoteMessage.data);
   }
 
   // Обработка нажатия на уведомление
   private handleNotificationOpened(remoteMessage: any): void {
     console.log('Handling notification opened:', remoteMessage);
-    
-    // Отправляем данные в WebView
     this.sendDataToWebView(remoteMessage.data);
   }
 
   // Отправка данных в WebView
   private sendDataToWebView(data: any): void {
-    // Этот метод будет переопределен в App.tsx
     console.log('Sending data to WebView:', data);
   }
 
